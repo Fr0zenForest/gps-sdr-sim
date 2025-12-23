@@ -1,0 +1,98 @@
+name: Build Linux
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 安装构建依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: 使用 Makefile 构建
+      run: |
+        make
+        
+    - name: 测试可执行文件
+      run: |
+        ./gps-sdr-sim --help || true
+        ls -lh gps-sdr-sim
+        file gps-sdr-sim
+    
+    - name: 构建不同 USER_MOTION_SIZE 版本
+      run: |
+        make clean
+        make USER_MOTION_SIZE=4000
+        mv gps-sdr-sim gps-sdr-sim-motion4000
+        
+        make clean
+        make USER_MOTION_SIZE=10000
+        mv gps-sdr-sim gps-sdr-sim-motion10000
+        
+        make clean
+        make
+    
+    - name: 打包构建产物
+      run: |
+        mkdir -p dist
+        cp gps-sdr-sim dist/
+        cp gps-sdr-sim-motion4000 dist/
+        cp gps-sdr-sim-motion10000 dist/
+        cp README.md dist/
+        cp LICENSE dist/
+        cp brdc0010.22n dist/
+        cp circle.csv dist/
+        cp circle_llh.csv dist/
+        tar -czf gps-sdr-sim-linux-x64.tar.gz -C dist .
+    
+    - name: 上传标准版本
+      uses: actions/upload-artifact@v4
+      with:
+        name: gps-sdr-sim-linux-standard
+        path: gps-sdr-sim
+        retention-days: 30
+    
+    - name: 上传扩展版本 (MOTION_SIZE=4000)
+      uses: actions/upload-artifact@v4
+      with:
+        name: gps-sdr-sim-linux-motion4000
+        path: gps-sdr-sim-motion4000
+        retention-days: 30
+    
+    - name: 上传扩展版本 (MOTION_SIZE=10000)
+      uses: actions/upload-artifact@v4
+      with:
+        name: gps-sdr-sim-linux-motion10000
+        path: gps-sdr-sim-motion10000
+        retention-days: 30
+    
+    - name: 上传完整压缩包
+      uses: actions/upload-artifact@v4
+      with:
+        name: gps-sdr-sim-linux-x64-package
+        path: gps-sdr-sim-linux-x64.tar.gz
+        retention-days: 30
+    
+    - name: 创建发布包 (仅在推送标签时)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          gps-sdr-sim
+          gps-sdr-sim-motion4000
+          gps-sdr-sim-motion10000
+          gps-sdr-sim-linux-x64.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
